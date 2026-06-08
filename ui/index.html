@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>dependency-jail | Zero-Root Supply Chain Sandbox</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #07090f;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --border-glass: rgba(56, 189, 248, 0.15);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --cyan: #06b6d4;
+            --cyan-glow: #22d3ee;
+            --red: #f43f5e;
+            --red-glow: #fb7185;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            overflow-x: hidden;
+        }
+
+        .hero-section {
+            position: relative;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 5%;
+            overflow: hidden;
+        }
+
+        .hero-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('file:///home/rohit-mishra/.gemini/antigravity/brain/83170e0b-287f-482f-afcd-957680473ad1/jail_hero_bg_1780901732076.png');
+            background-size: cover;
+            background-position: center;
+            opacity: 0.4;
+            z-index: 0;
+            filter: saturate(1.2) contrast(1.1);
+        }
+
+        .hero-overlay {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 50% 50%, transparent 20%, var(--bg-dark) 80%);
+            z-index: 1;
+        }
+
+        .content-wrapper {
+            position: relative;
+            z-index: 2;
+            max-width: 1200px;
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+        }
+
+        .text-content h1 {
+            font-size: 4.5rem;
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, #ffffff 0%, var(--cyan) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -1px;
+        }
+
+        .text-content p {
+            font-size: 1.25rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+            margin-bottom: 40px;
+            max-width: 500px;
+        }
+
+        .cta-group {
+            display: flex;
+            gap: 20px;
+        }
+
+        .btn {
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+
+        .btn-primary {
+            background: rgba(6, 182, 212, 0.1);
+            color: var(--cyan-glow);
+            border-color: var(--cyan);
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.2);
+        }
+
+        .btn-primary:hover {
+            background: rgba(6, 182, 212, 0.2);
+            box-shadow: 0 0 30px rgba(6, 182, 212, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-main);
+            border-color: var(--border-glass);
+            backdrop-filter: blur(10px);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateY(-2px);
+        }
+
+        /* Glassmorphism Terminal */
+        .terminal-glass {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            position: relative;
+            overflow: hidden;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .terminal-glass::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+            opacity: 0.5;
+        }
+
+        .term-header {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .dot {
+            width: 12px; height: 12px; border-radius: 50%;
+        }
+        .dot.r { background: #ff5f56; }
+        .dot.y { background: #ffbd2e; }
+        .dot.g { background: #27c93f; }
+
+        .line { margin-bottom: 8px; display: flex; }
+        .prompt { color: var(--cyan); margin-right: 12px; }
+        .cmd { color: #f8fafc; }
+        
+        .log-allow { color: var(--text-muted); }
+        .log-block { color: var(--red-glow); font-weight: bold; text-shadow: 0 0 10px rgba(244, 63, 94, 0.5); }
+        
+        .cursor {
+            display: inline-block;
+            width: 8px;
+            height: 1em;
+            background: var(--cyan);
+            animation: blink 1s step-end infinite;
+            vertical-align: middle;
+            margin-left: 4px;
+        }
+
+        @keyframes blink { 50% { opacity: 0; } }
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
+        /* Features Section */
+        .features {
+            padding: 100px 5%;
+            background: linear-gradient(180deg, var(--bg-dark) 0%, #0b0f19 100%);
+            position: relative;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 60px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 40px 30px;
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--cyan);
+            box-shadow: 0 10px 30px rgba(6, 182, 212, 0.1);
+        }
+
+        .icon-wrap {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            background: rgba(6, 182, 212, 0.1);
+            color: var(--cyan);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 24px;
+        }
+
+        .feature-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 16px;
+        }
+
+        .feature-card p {
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        @media (max-width: 900px) {
+            .content-wrapper {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+            .text-content p {
+                margin: 0 auto 40px auto;
+            }
+            .cta-group {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <section class="hero-section">
+        <div class="hero-bg"></div>
+        <div class="hero-overlay"></div>
+        
+        <div class="content-wrapper">
+            <div class="text-content">
+                <h1>Stop Supply Chain Attacks Cold.</h1>
+                <p><strong>What is the point of this?</strong> When you run <code>pip install</code> or <code>npm install</code>, packages can run arbitrary code to steal your SSH keys or `.env` files and send them to an attacker's server.<br><br>
+                <b>dependency-jail</b> intercepts system calls via <code>LD_PRELOAD</code> to block all unauthorized outbound network connections during installation, securing your environment instantly.</p>
+                
+                <div class="cta-group">
+                    <a href="report_viewer.html" class="btn btn-primary">Open Report Dashboard</a>
+                    <a href="https://github.com/rohit-mishra/dependency-jail" class="btn btn-secondary">View on GitHub</a>
+                </div>
+            </div>
+
+            <div class="terminal-glass">
+                <div class="term-header">
+                    <div class="dot r"></div>
+                    <div class="dot y"></div>
+                    <div class="dot g"></div>
+                </div>
+                
+                <div class="line">
+                    <span class="prompt">user@host:~$</span>
+                    <span class="cmd">dep-jail pip install requests</span>
+                </div>
+                <div class="line" style="margin-top: 15px; color: #94a3b8;">
+                    [INFO] Compiling LD_PRELOAD interceptor...<br>
+                    [INFO] Sandboxing subprocess: pip install requests
+                </div>
+                <div class="line log-allow" style="margin-top: 15px;">
+                    14:32:01 ✓ allowed → 151.101.0.223:443 (pypi.org)
+                </div>
+                <div class="line log-allow">
+                    14:32:02 ✓ allowed → 151.101.1.63:443 (files.pythonhosted.org)
+                </div>
+                <div class="line log-block" style="margin-top: 10px;">
+                    14:32:04 ✗ BLOCKED → 45.33.49.119:80 (malicious-exfil.com)
+                </div>
+                <div class="line log-block">
+                    14:32:04 ✗ BLOCKED → 45.33.49.119:443 (malicious-exfil.com)
+                </div>
+                <div class="line" style="margin-top: 15px; color: #10b981;">
+                    ✓ CLEAN RUN • 2 allowed • 2 BLOCKED
+                </div>
+                <div class="line" style="margin-top: 15px;">
+                    <span class="prompt">user@host:~$</span><span class="cursor"></span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="features">
+        <h2 class="section-title">Why it's necessary.</h2>
+        <div class="grid-3">
+            <div class="feature-card">
+                <div class="icon-wrap">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                </div>
+                <h3>Zero-Root Sandboxing</h3>
+                <p>No Docker, no VMs, no root privileges required. Works by injecting a custom <code>libc.so</code> connect() hook that drops malicious sockets at the kernel boundary.</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon-wrap">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                </div>
+                <h3>Profile-Based Trust</h3>
+                <p>Use the <code>--profile pypi</code> flag to automatically trust only Python registries, immediately isolating packages that try to reach out to npm, github, or arbitrary IPs.</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon-wrap">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                </div>
+                <h3>Rich JSON Reporting</h3>
+                <p>Use <code>--report output.json</code> to generate highly detailed forensic logs of everything the installer attempted to do. View them visually in our local Report Dashboard.</p>
+            </div>
+        </div>
+    </section>
+
+</body>
+</html>

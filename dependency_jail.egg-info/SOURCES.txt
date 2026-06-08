@@ -1,0 +1,16 @@
+LICENSE
+README.md
+pyproject.toml
+dep_jail/__init__.py
+dep_jail/cli.py
+dep_jail/core.py
+dep_jail/gui.py
+dep_jail/libjail.c
+dep_jail/resolver.py
+dependency_jail.egg-info/PKG-INFO
+dependency_jail.egg-info/SOURCES.txt
+dependency_jail.egg-info/dependency_links.txt
+dependency_jail.egg-info/entry_points.txt
+dependency_jail.egg-info/top_level.txt
+tests/__init__.py
+tests/test_jail.py

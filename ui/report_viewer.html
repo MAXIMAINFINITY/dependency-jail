@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>dependency-jail • Report Viewer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f1115;
+            --bg-panel: rgba(255, 255, 255, 0.05);
+            --border-glass: rgba(255, 255, 255, 0.1);
+            --text-main: #f0f0f0;
+            --text-muted: #8b92a5;
+            --accent-cyan: #38bdf8;
+            --accent-red: #f43f5e;
+            --accent-green: #10b981;
+            --accent-yellow: #fbbf24;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            background-image: radial-gradient(circle at 50% -20%, #1e293b, transparent 50%),
+                              radial-gradient(circle at right 60%, rgba(56, 189, 248, 0.05), transparent 40%);
+            background-attachment: fixed;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            max-width: 1000px;
+            width: 90%;
+            margin: 40px auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-weight: 700;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #e0e7ff, var(--accent-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .glass-panel {
+            background: var(--bg-panel);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .glass-panel:hover {
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .upload-section {
+            text-align: center;
+            padding: 40px 20px;
+            border: 2px dashed var(--border-glass);
+            cursor: pointer;
+        }
+        
+        .upload-section:hover {
+            border-color: var(--accent-cyan);
+            background: rgba(56, 189, 248, 0.05);
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .upload-btn {
+            background: var(--accent-cyan);
+            color: var(--bg-dark);
+            border: none;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 16px;
+            transition: background 0.2s;
+        }
+
+        .upload-btn:hover {
+            background: #7dd3fc;
+        }
+
+        /* Dashboard specific */
+        .dashboard {
+            display: none; /* hidden until file uploaded */
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .val-red { color: var(--accent-red); }
+        .val-green { color: var(--accent-green); }
+        .val-cyan { color: var(--accent-cyan); }
+        .val-yellow { color: var(--accent-yellow); }
+
+        .meta-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            font-size: 0.95rem;
+        }
+
+        .command-badge {
+            background: rgba(0,0,0,0.3);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-family: monospace;
+            color: var(--accent-cyan);
+            border: 1px solid var(--border-glass);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            padding: 14px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-glass);
+        }
+
+        th {
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tbody tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .badge-blocked { background: rgba(244, 63, 94, 0.2); color: var(--accent-red); }
+        .badge-allowed { background: rgba(16, 185, 129, 0.2); color: var(--accent-green); }
+        
+        .empty-state {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>dependency-jail</h1>
+            <div class="subtitle">Execution Report Dashboard</div>
+        </header>
+
+        <div class="glass-panel upload-section" id="uploadPanel" onclick="document.getElementById('fileInput').click()">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:15px">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <h2>Upload report.json</h2>
+            <p style="color: var(--text-muted); margin-bottom: 20px;">Drop your dependency-jail JSON report file here or click to browse.</p>
+            <input type="file" id="fileInput" accept=".json">
+            <button class="upload-btn">Select File</button>
+        </div>
+
+        <div class="dashboard" id="dashboard">
+            <div class="glass-panel">
+                <div class="meta-info">
+                    <div><strong>Command executed:</strong> <span class="command-badge" id="cmdVal"></span></div>
+                    <div style="color: var(--text-muted)">Timestamp: <span id="timeVal"></span></div>
+                </div>
+            </div>
+
+            <div class="stats-grid">
+                <div class="glass-panel stat-card">
+                    <div class="stat-value val-red" id="blockedCount">0</div>
+                    <div class="stat-label">Connections Blocked</div>
+                </div>
+                <div class="glass-panel stat-card">
+                    <div class="stat-value val-green" id="allowedCount">0</div>
+                    <div class="stat-label">Connections Allowed</div>
+                </div>
+                <div class="glass-panel stat-card">
+                    <div class="stat-value val-yellow" id="exitCode">0</div>
+                    <div class="stat-label">Exit Code</div>
+                </div>
+            </div>
+
+            <div class="glass-panel">
+                <h3 style="margin-top:0; color: var(--accent-red);">Blocked Connections</h3>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Verdict</th>
+                                <th>Destination IP</th>
+                                <th>Port</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody id="blockedTableBody">
+                            <!-- populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="glass-panel">
+                <h3 style="margin-top:0; color: var(--accent-green);">Allowed Connections</h3>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Verdict</th>
+                                <th>Destination IP</th>
+                                <th>Port</th>
+                            </tr>
+                        </thead>
+                        <tbody id="allowedTableBody">
+                            <!-- populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div style="text-align:center; margin-top: 30px;">
+                <button class="upload-btn" onclick="location.reload()" style="background: rgba(255,255,255,0.1); color: white;">Load Another Report</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        
+        // Drag and drop handling
+        const uploadPanel = document.getElementById('uploadPanel');
+        uploadPanel.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadPanel.style.borderColor = 'var(--accent-cyan)';
+            uploadPanel.style.background = 'rgba(56, 189, 248, 0.1)';
+        });
+        uploadPanel.addEventListener('dragleave', () => {
+            uploadPanel.style.borderColor = 'var(--border-glass)';
+            uploadPanel.style.background = 'var(--bg-panel)';
+        });
+        uploadPanel.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                processFile();
+            }
+        });
+
+        fileInput.addEventListener('change', processFile);
+
+        function processFile() {
+            if (!fileInput.files.length) return;
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    renderDashboard(data);
+                } catch (err) {
+                    alert("Invalid JSON file.");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function renderDashboard(data) {
+            document.getElementById('uploadPanel').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+
+            // Meta
+            document.getElementById('cmdVal').textContent = (data.command || []).join(' ');
+            document.getElementById('timeVal').textContent = new Date((data.timestamp || 0) * 1000).toLocaleString();
+            
+            // Stats
+            document.getElementById('blockedCount').textContent = (data.blocked || []).length;
+            document.getElementById('allowedCount').textContent = (data.allowed || []).length;
+            document.getElementById('exitCode').textContent = data.exit_code !== undefined ? data.exit_code : '?';
+
+            // Blocked Table
+            const blockedBody = document.getElementById('blockedTableBody');
+            if (data.blocked && data.blocked.length > 0) {
+                blockedBody.innerHTML = data.blocked.map(ev => `
+                    <tr>
+                        <td><span class="badge badge-blocked">BLOCKED</span></td>
+                        <td style="font-family: monospace;">${ev.ip || '?'}</td>
+                        <td>${ev.port || 0}</td>
+                        <td style="color: var(--text-muted)">${ev.detail || 'Not in allowlist'}</td>
+                    </tr>
+                `).join('');
+            } else {
+                blockedBody.innerHTML = `<tr><td colspan="4" class="empty-state">No blocked connections found. 🎉</td></tr>`;
+            }
+
+            // Allowed Table
+            const allowedBody = document.getElementById('allowedTableBody');
+            if (data.allowed && data.allowed.length > 0) {
+                allowedBody.innerHTML = data.allowed.map(ev => `
+                    <tr>
+                        <td><span class="badge badge-allowed">ALLOWED</span></td>
+                        <td style="font-family: monospace;">${ev.ip || '?'}</td>
+                        <td>${ev.port || 0}</td>
+                    </tr>
+                `).join('');
+            } else {
+                allowedBody.innerHTML = `<tr><td colspan="3" class="empty-state">No allowed connections logged. (Run with --verbose to log them)</td></tr>`;
+            }
+        }
+    </script>
+</body>
+</html>

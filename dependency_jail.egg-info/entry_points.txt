@@ -1,0 +1,3 @@
+[console_scripts]
+dep-jail = dep_jail.cli:main
+dep-jail-gui = dep_jail.gui:main

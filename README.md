@@ -1,2 +1,295 @@
-# dependency-jail
-Experimental Linux supply-chain network sandbox using LD_PRELOAD interception. Verified against IPv4 and IPv6 enforcement scenarios.
+<div align="center">
+
+```
+██████╗ ███████╗██████╗       ██╗ █████╗ ██╗██╗
+██╔══██╗██╔════╝██╔══██╗      ██║██╔══██╗██║██║
+██║  ██║█████╗  ██████╔╝█████╗██║███████║██║██║
+██║  ██║██╔══╝  ██╔═══╝ ╚════╝██║██╔══██║██║██║
+██████╔╝███████╗██║           ██║██║  ██║██║███████╗
+╚═════╝ ╚══════╝╚═╝           ╚═╝╚═╝  ╚═╝╚═╝╚══════╝
+```
+
+**Supply-Chain Network Sandbox for Linux**
+
+*Block unauthorized outbound connections during `pip install` and `npm install` — without root, Docker, or VMs.*
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+[![Platform: Linux](https://img.shields.io/badge/platform-Linux-lightgrey.svg)](https://kernel.org/)
+[![Zero Dependencies](https://img.shields.io/badge/dependencies-zero-green.svg)](#installation)
+
+</div>
+
+---
+
+## The Problem
+
+When you run `pip install` or `npm install`, the package manager downloads and
+executes code from the internet — including **post-install scripts** and **build hooks**.
+A malicious package can use this execution window to:
+
+- Read `~/.ssh/id_rsa`, `~/.aws/credentials`, or `.env` files
+- Exfiltrate your `$PATH`, `$HOME`, and environment variables to an attacker's server
+- Download and persist a second-stage payload
+
+Standard registry trust models only validate package signatures — they do **not**
+prevent arbitrary network calls made by the package during installation.
+
+---
+
+## Real-World Use Cases & Intentions
+
+This project was built with the **intention of creating a low-level, zero-friction security tool** that stops the fastest-growing threat in software development: Open-Source Supply Chain Attacks. 
+
+Here is exactly how `dependency-jail` protects you in the real world:
+
+### 1. Typosquatting (The Accidental Typo)
+You intend to type `pip install requests` but accidentally type `pip install requesfs`. Hackers register misspelled packages that run malware immediately upon download. By the time you notice the typo, your SSH keys have already been stolen.
+* **With dependency-jail:** The malicious package tries to open a socket to the hacker's IP address. The jail intercepts it, sees the IP isn't PyPI, blocks the connection, and saves your machine from a breach.
+
+### 2. Compromised Maintainer Accounts
+Hackers frequently phish the creators of popular, highly-trusted packages (like what happened with the `event-stream` incident in npm or the malicious `colorama` injection). When you update your trusted app, you unknowingly pull in malware designed to harvest environment variables.
+* **With dependency-jail:** Even if you trust the package, you lock down *what the installation process is allowed to do*. The malware is physically incapable of "phoning home" to transmit your stolen data.
+
+### 3. Securing Enterprise CI/CD Pipelines
+Build servers run automated installations (`npm ci`, `pip install`) thousands of times a day. If a malicious dependency slips in, it can infect the build server and pivot into the internal corporate network.
+* **With dependency-jail:** Security teams can wrap the installation commands in the CI/CD pipeline, guaranteeing that the build server can *only* talk to official package registries and nowhere else.
+
+---
+
+## The Solution
+
+`dependency-jail` wraps your install command in a **zero-root network sandbox**
+using Linux's `LD_PRELOAD` mechanism:
+
+```
+┌───────────────────────────────────────────────────────────┐
+│  dep-jail pip install <package>                           │
+│                                                           │
+│   ┌──────────────────────────────────────────────────┐   │
+│   │  pip process  +  all child processes             │   │
+│   │                                                  │   │
+│   │  connect("pypi.org")        → ✓ ALLOWED         │   │
+│   │  connect("attacker.io")     → ✗ BLOCKED         │   │
+│   │  connect("pastebin.com")    → ✗ BLOCKED         │   │
+│   └──────────────────────────────────────────────────┘   │
+│                                                           │
+│  libjail.so intercepts every connect() system call       │
+└───────────────────────────────────────────────────────────┘
+```
+
+### How It Works
+
+1. **C-Level Hook**: A tiny shared library (`libjail.so`) is compiled on first run.
+   It overrides the standard C library's `connect()` function using `LD_PRELOAD`.
+
+2. **Transparent Injection**: The installer and **all of its child processes**
+   automatically load `libjail.so` — no code changes required.
+
+3. **Allowlist Enforcement**: Every outbound `connect()` call checks the
+   destination IP against a pre-resolved allowlist of trusted registries
+   (PyPI, npm, GitHub, Conda, Cargo, etc.).
+
+4. **Block & Log**: Unauthorized connections are rejected with `ECONNREFUSED`
+   and logged to the terminal in real-time.
+
+---
+
+## Installation
+
+**Requirements**: Linux, Python 3.9+, `gcc` (for the one-time C compilation).
+
+```bash
+# Clone
+git clone https://github.com/yourusername/dependency-jail.git
+cd dependency-jail
+
+# Install (compiles libjail.so on first run)
+pip install -e .
+```
+
+That's it. No `sudo`. No Docker. No virtual machines.
+
+---
+
+## Usage
+
+Simply prefix any package-manager command with `dep-jail`:
+
+```bash
+# Python packages
+dep-jail pip install requests
+dep-jail pip install -r requirements.txt
+
+# Node packages
+dep-jail npm install
+dep-jail npm ci
+
+# Any other installer
+dep-jail cargo add serde
+dep-jail gem install rails
+```
+
+### Trust Additional Domains
+
+```bash
+# Trust a private mirror
+dep-jail --allow-domain my.internal.mirror.io pip install pandas
+
+# Trust a CIDR range (e.g. corporate proxy)
+dep-jail --allow-cidr 10.10.20.0/24 npm install
+```
+
+### Verbose Mode (log all connections, not just blocked)
+
+```bash
+dep-jail --verbose pip install numpy
+```
+
+### Dry-Run (inspect the allowlist without running anything)
+
+```bash
+dep-jail --dry-run npm install
+```
+
+### Strict Security Verification
+
+Before trusting the sandbox in production, run the pessimistic zero-trust verifier to ensure your OS network stack, `gcc`, IPC pipes, and `LD_PRELOAD` hooks are functioning correctly for both IPv4 and IPv6:
+
+```bash
+dep-jail --verify
+```
+
+### Pre-Compile the Interceptor
+
+```bash
+dep-jail --compile-only
+```
+
+---
+
+## Example Output
+
+```
+  ██████╗ ███████╗██████╗ ...
+
+  Sandboxing: pip install requests beautifulsoup4
+
+    ⚙  Compiling network interceptor… done
+    🔍  Resolving trusted registry IPs…
+    ✓  Allowlist built: 47 entries
+
+    🚀  Running: pip install requests beautifulsoup4
+
+  09:14:32  ✓ allowed  →  151.101.64.223:443
+  09:14:32  ✓ allowed  →  151.101.64.223:443
+  09:14:33  ✗ BLOCKED  →  45.33.49.119:80   (not in allowlist)
+
+  ──────────────────────────────────────────────────────────────
+    dependency-jail  •  Run Summary
+  ──────────────────────────────────────────────────────────────
+    Status      : ✗  THREATS DETECTED
+    Exit code   : 0
+    Duration    : 4.2s
+    Allowed     : 12 connections
+    Blocked     : 1 connections
+
+    Blocked Destinations
+      ✗  45.33.49.119:80
+  ──────────────────────────────────────────────────────────────
+```
+
+---
+
+## Architecture
+
+```
+dependency-jail/
+├── dep_jail/
+│   ├── libjail.c       ← C interceptor: hooks connect() via LD_PRELOAD
+│   ├── resolver.py     ← Parallel DNS resolver + IP cache for registries
+│   ├── core.py         ← Compiler, FIFO log reader, JailRunner orchestrator
+│   ├── gui.py          ← Desktop GUI using Tkinter
+│   └── cli.py          ← Argument parser + ANSI terminal UI
+├── tests/
+│   └── test_jail.py    ← Unit + integration tests (no external deps)
+├── pyproject.toml
+└── README.md
+```
+
+### Technical Deep-Dive: `LD_PRELOAD` Interception
+
+Linux's dynamic linker resolves shared library symbols at runtime. By setting
+`LD_PRELOAD`, our custom `libjail.so` is loaded **before** `libc.so`, causing
+the dynamic linker to resolve the `connect` symbol to our implementation first.
+
+```c
+// Our hook — called instead of libc's connect()
+int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
+    // Extract destination IP from addr
+    // Check against allowlist loaded from JAIL_ALLOW_IPS env var
+    // If blocked → errno = ECONNREFUSED; return -1
+    // If allowed → forward to original: dlsym(RTLD_NEXT, "connect")
+}
+```
+
+This approach is:
+- **Transparent**: No changes to the package manager or the installed packages.
+- **Deep**: Intercepts calls from all child processes (`fork`/`exec` inherit `LD_PRELOAD`).
+- **Correct**: Loopback (`127.x.x.x`) and Unix domain sockets always pass through.
+
+---
+
+## Trusted Registries (Default Allowlist)
+
+| Ecosystem | Trusted Domains |
+|-----------|----------------|
+| Python    | `pypi.org`, `files.pythonhosted.org` |
+| Node      | `registry.npmjs.org`, `nodejs.org` |
+| GitHub    | `github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com` |
+| Conda     | `conda.anaconda.org`, `repo.anaconda.com` |
+| Cargo     | `crates.io`, `static.crates.io` |
+| RubyGems  | `rubygems.org` |
+
+IPs are resolved at startup (with a 1-hour cache) so the allowlist stays
+current with CDN rotations.
+
+---
+
+## Running Tests
+
+```bash
+python -m pytest tests/ -v
+
+# Or without pytest
+python tests/test_jail.py
+```
+
+---
+
+## Limitations
+
+- **Linux only**: `LD_PRELOAD` and the `/proc` filesystem are Linux-specific.
+  macOS uses a different interposer model (`DYLD_INSERT_LIBRARIES`); Windows
+  is out of scope.
+- **Statically Linked Binaries**: Statically linked executables (e.g. standard Go binaries) do not use the dynamic linker and therefore bypass `LD_PRELOAD`. However, standard language package managers (`pip`, `npm`, `cargo`) and their child scripts are universally dynamically linked.
+- **Local Network Routing Rules**: If your local network explicitly drops unroutable packets (e.g. TCP resets from a router) rather than relying on the software sandbox, `dep-jail --verify` natively attempts to connect to 99.999% available IPs (like Google DNS) to ensure the block originates strictly from `libjail.so` and not environmental routing quirks.
+
+---
+
+## Contributing
+
+Pull requests are welcome. For major changes, please open an issue first.
+
+```bash
+git clone https://github.com/yourusername/dependency-jail.git
+cd dependency-jail
+pip install -e ".[dev]"
+python -m pytest tests/ -v
+```
+
+---
+
+## License
+
+[MIT](LICENSE) — use freely, contribute openly.
